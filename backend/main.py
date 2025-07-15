@@ -6,18 +6,11 @@ import requests
 from bs4 import BeautifulSoup
 import httpx
 import os
-import spacy
 import logging
 
 # Setup logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
-
-# Load spaCy model (optional, can be lazy-loaded)
-try:
-    nlp = spacy.load("en_core_web_sm")
-except Exception:
-    nlp = None
 
 app = FastAPI()
 
@@ -85,19 +78,8 @@ async def analyze(request: AnalyzeRequest):
             logger.error(f"Google PSI error: {e}")
             performance = {"error": str(e)}
 
-    # 3. NLP (optional)
+    # 3. NLP (removed, always None)
     nlp_result = None
-    if nlp and meta and not meta.get("error"):
-        try:
-            doc = nlp(soup.get_text())
-            word_freq = {token.text.lower(): 0 for token in doc if token.is_alpha and not token.is_stop}
-            for token in doc:
-                if token.is_alpha and not token.is_stop:
-                    word_freq[token.text.lower()] += 1
-            nlp_result = {"top_keywords": sorted(word_freq.items(), key=lambda x: -x[1])[:10]}
-        except Exception as e:
-            logger.error(f"NLP error: {e}")
-            nlp_result = {"error": str(e)}
 
     return AnalyzeResult(
         url=url,
