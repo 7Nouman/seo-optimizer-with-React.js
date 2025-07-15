@@ -1,7 +1,7 @@
 import React, { useState, useRef } from 'react';
 import Chart from 'chart.js/auto';
 
-const BACKEND_URL = 'http://localhost:8000'; // Change to your deployed FastAPI backend if needed
+const BACKEND_URL = process.env.REACT_APP_BACKEND_URL || 'https://seoop.onrender.com'; // Change to your deployed FastAPI backend if needed
 
 const FEATURES = [
   {
