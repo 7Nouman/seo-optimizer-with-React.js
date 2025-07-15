@@ -73,7 +73,7 @@ async def analyze(request: AnalyzeRequest):
     if GOOGLE_API_KEY:
         try:
             async with httpx.AsyncClient(timeout=15) as client:
-                r = await client.get(GOOGLE_PSI_API, params={"url": url, "key": GOOGLE_API_KEY, "category": ["PERFORMANCE", "SEO"]})
+                r = await client.get(GOOGLE_PSI_API, params={"url": url, "key": GOOGLE_API_KEY, "category": "PERFORMANCE,SEO"})
                 if r.status_code == 200:
                     performance = r.json()
                 else:
