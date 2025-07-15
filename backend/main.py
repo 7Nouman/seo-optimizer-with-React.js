@@ -14,10 +14,12 @@ logger = logging.getLogger(__name__)
 
 app = FastAPI()
 
-# Allow CORS for local frontend dev
+# Allow CORS for your Vercel frontend (replace with your actual Vercel URL if it changes)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=[
+        "https://seo-optimizer-with-react-46d2g10i4-7noumans-projects.vercel.app"
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
