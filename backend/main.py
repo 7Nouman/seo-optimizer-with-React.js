@@ -18,7 +18,7 @@ app = FastAPI()
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
-        "https://seo-optimizer-with-react-46d2g10i4-7noumans-projects.vercel.app"
+        "https://seo-optimizer-with-react-jy5u75h9s-7noumans-projects.vercel.app"
     ],
     allow_credentials=True,
     allow_methods=["*"],
