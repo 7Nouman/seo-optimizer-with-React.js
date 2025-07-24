@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException, Body
+from fastapi import FastAPI, HTTPException, Body, Query
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, HttpUrl
 from typing import Optional, Dict, Any, List
@@ -35,6 +35,7 @@ class AnalyzeResult(BaseModel):
     images: Dict[str, Any]
     performance: Optional[Dict[str, Any]] = None
     nlp: Optional[Dict[str, Any]] = None
+    gemini_recommendations: Optional[str] = None
 
 GOOGLE_PSI_API = "https://www.googleapis.com/pagespeedonline/v5/runPagespeed"
 GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")  # Set in .env or Render dashboard
@@ -65,6 +66,7 @@ async def analyze(request: AnalyzeRequest):
 
     # 2. Google PageSpeed Insights
     performance = None
+    gemini_recommendations = None
     if GOOGLE_API_KEY:
         try:
             async with httpx.AsyncClient(timeout=15) as client:
@@ -79,8 +81,30 @@ async def analyze(request: AnalyzeRequest):
         except Exception as e:
             logger.error(f"Google PSI error: {e}")
             performance = {"error": str(e)}
+    # 3. Gemini SEO Recommendations
+    if performance:
+        import json
+        prompt = f"""
+You are an expert SEO assistant. Given the following Google PageSpeed Insights API JSON result for a website, analyze the data and provide actionable recommendations to improve the website's SEO and Google ranking.
 
-    # 3. NLP (removed, always None)
+- Focus on issues related to performance, SEO, accessibility, and best practices.
+- For each issue, explain why it matters and how to fix it.
+- Prioritize the most impactful changes.
+
+Google PageSpeed Insights API Result:
+{json.dumps(performance, indent=2)}
+
+Return your recommendations as a numbered list.
+"""
+        try:
+            model = genai.GenerativeModel("gemini-pro")
+            gemini_response = model.generate_content(prompt)
+            gemini_recommendations = gemini_response.text
+        except Exception as e:
+            logger.error(f"Gemini API error: {e}")
+            gemini_recommendations = f"Gemini API error: {e}"
+
+    # 4. NLP (removed, always None)
     nlp_result = None
 
     return AnalyzeResult(
@@ -89,7 +113,8 @@ async def analyze(request: AnalyzeRequest):
         headings=headings,
         images=images,
         performance=performance,
-        nlp=nlp_result
+        nlp=nlp_result,
+        gemini_recommendations=gemini_recommendations
     )
 
 # --- Gemini AI SEO Assistant Integration ---
@@ -163,6 +188,62 @@ Return the result as JSON with the following keys: analysis, improved_content, m
     except Exception as e:
         logger.error(f"Gemini API error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+class AnalyzeWithGeminiRequest(BaseModel):
+    url: HttpUrl
+
+class AnalyzeWithGeminiResult(BaseModel):
+    url: HttpUrl
+    performance: Optional[Dict[str, Any]] = None
+    gemini_recommendations: Optional[str] = None
+
+@app.post("/analyze-with-gemini", response_model=AnalyzeWithGeminiResult)
+async def analyze_with_gemini(request: AnalyzeWithGeminiRequest):
+    url = str(request.url)
+    performance = None
+    gemini_recommendations = None
+    # 1. Google PageSpeed Insights
+    if GOOGLE_API_KEY:
+        try:
+            async with httpx.AsyncClient(timeout=15) as client:
+                r = await client.get(GOOGLE_PSI_API, params={"url": url, "key": GOOGLE_API_KEY, "category": "PERFORMANCE,SEO"})
+                if r.status_code == 200:
+                    performance = r.json()
+                else:
+                    performance = {"error": f"Google PSI returned {r.status_code}"}
+        except httpx.ReadTimeout:
+            logger.error("Google PageSpeed Insights API timed out")
+            performance = {"error": "Google PageSpeed Insights API timed out"}
+        except Exception as e:
+            logger.error(f"Google PSI error: {e}")
+            performance = {"error": str(e)}
+    # 2. Gemini SEO Recommendations
+    if performance:
+        import json
+        prompt = f"""
+You are an expert SEO assistant. Given the following Google PageSpeed Insights API JSON result for a website, analyze the data and provide actionable recommendations to improve the website's SEO and Google ranking.
+
+- Focus on issues related to performance, SEO, accessibility, and best practices.
+- For each issue, explain why it matters and how to fix it.
+- Prioritize the most impactful changes.
+
+Google PageSpeed Insights API Result:
+{json.dumps(performance, indent=2)}
+
+Return your recommendations as a numbered list.
+"""
+        try:
+            model = genai.GenerativeModel("gemini-pro")
+            gemini_response = model.generate_content(prompt)
+            gemini_recommendations = gemini_response.text
+        except Exception as e:
+            logger.error(f"Gemini API error: {e}")
+            gemini_recommendations = f"Gemini API error: {e}"
+    return AnalyzeWithGeminiResult(
+        url=url,
+        performance=performance,
+        gemini_recommendations=gemini_recommendations
+    )
 
 @app.get("/")
 def root():
