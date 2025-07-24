@@ -1,7 +1,7 @@
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Body
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, HttpUrl
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List
 import requests
 from bs4 import BeautifulSoup
 import httpx
@@ -91,6 +91,78 @@ async def analyze(request: AnalyzeRequest):
         performance=performance,
         nlp=nlp_result
     )
+
+# --- Gemini AI SEO Assistant Integration ---
+
+class AISEORequest(BaseModel):
+    content: str
+    keyword: str
+
+class AISEOResponse(BaseModel):
+    analysis: str
+    improved_content: str
+    meta_title: str
+    meta_description: str
+    keyword_suggestions: List[dict]
+
+import google.generativeai as genai
+
+GEMINI_API_KEY = "AIzaSyDJ6GV3k4FMiy1EKYEgF7qghETzYgO-jnA"  # Provided by user
+
+genai.configure(api_key=GEMINI_API_KEY)
+
+@app.post("/ai-seo-analyze", response_model=AISEOResponse)
+async def ai_seo_analyze(request: AISEORequest = Body(...)):
+    prompt = f"""
+You are an expert SEO assistant helping improve website pages for better Google rankings.
+
+Given the following webpage content and target keyword, perform the following tasks:
+
+1. SEO Content Analysis: Score the content out of 10 based on SEO best practices. Comment on keyword usage, readability, structure, internal linking, and engagement.
+
+2. Content Improvement: Rewrite or improve the content to better optimize it for SEO. Keep it under 300 words, include the target keyword naturally, and enhance clarity, structure, and user engagement.
+
+3. Meta Tags:
+   - Generate an SEO-optimized meta title (max 60 characters).
+   - Generate an SEO-optimized meta description (max 160 characters).
+
+4. Keyword Suggestions:
+   - Suggest 10 long-tail keywords related to the target keyword.
+   - For each keyword, mention its purpose (e.g., intent type: informational, transactional, etc.).
+
+Webpage Content:
+{request.content}
+
+Target Keyword:
+{request.keyword}
+
+Return the result as JSON with the following keys: analysis, improved_content, meta_title, meta_description, keyword_suggestions (as a list of objects with 'keyword' and 'intent').
+"""
+    try:
+        model = genai.GenerativeModel("gemini-pro")
+        response = model.generate_content(prompt)
+        import json
+        # Try to parse the response as JSON
+        try:
+            result = json.loads(response.text)
+        except Exception:
+            # Fallback: try to extract JSON from the response text
+            import re
+            match = re.search(r'\{.*\}', response.text, re.DOTALL)
+            if match:
+                result = json.loads(match.group(0))
+            else:
+                raise ValueError("Could not parse Gemini response as JSON")
+        return AISEOResponse(
+            analysis=result.get("analysis", ""),
+            improved_content=result.get("improved_content", ""),
+            meta_title=result.get("meta_title", ""),
+            meta_description=result.get("meta_description", ""),
+            keyword_suggestions=result.get("keyword_suggestions", [])
+        )
+    except Exception as e:
+        logger.error(f"Gemini API error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/")
 def root():
